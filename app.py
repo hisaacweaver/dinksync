@@ -47,6 +47,13 @@ PLAYER_PAGE = st.Page(
     url_path="player-submit-availability",
 )
 
+PLAYER_LEGACY_PAGE = st.Page(
+    "views/player_submit_availability.py",
+    title="Submit Availability",
+    icon="🏓",
+    url_path="Player_Submit_Availability",
+)
+
 
 def is_admin() -> bool:
     return bool(st.session_state.get("is_admin"))
@@ -93,7 +100,7 @@ else:
     # Non-admin users only get the player availability page.
     # No sidebar page navigation is shown.
     nav = st.navigation(
-        [PLAYER_PAGE],
+        [PLAYER_PAGE, PLAYER_LEGACY_PAGE],
         position="hidden",
     )
 

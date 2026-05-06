@@ -45,7 +45,7 @@ window_id = window_options[selected_label]
 window = next(w for w in windows if w["id"] == window_id)
 st.session_state["selected_window_id"] = window_id
 
-base_url = "https://byupbscheduling.streamlit.app/player-submit-availability"
+base_url = "https://byupbscheduling.streamlit.app/"
 player_link = f"{base_url}?token={window['public_token']}"
 st.write("Share this token or link with players:")
 st.code(window["public_token"])
@@ -140,63 +140,68 @@ def render_slot_button(container, slot_date: date, hour: int, key_prefix: str) -
     )
 
 
-layout = st.radio("Layout", ["Calendar", "Day-by-day"], horizontal=True)
+@st.fragment
+def render_availability_grid() -> None:
+    layout = st.radio("Layout", ["Calendar", "Day-by-day"], horizontal=True)
 
-action_col1, action_col2 = st.columns(2)
-action_col1.button("Select All Available Slots", on_click=select_all_available_slots)
-action_col2.button(
-    "Clear Selected Slots",
-    disabled=not st.session_state[selected_state_key],
-    on_click=clear_selected_slots,
-)
+    action_col1, action_col2 = st.columns(2)
+    action_col1.button("Select All Available Slots", on_click=select_all_available_slots)
+    action_col2.button(
+        "Clear Selected Slots",
+        disabled=not st.session_state[selected_state_key],
+        on_click=clear_selected_slots,
+    )
 
-if layout == "Calendar":
-    for week_start in week_starts_between(window_start, window_end):
-        week_end = week_start + timedelta(days=5)
-        st.markdown(f"**Week of {week_start.isoformat()} to {week_end.isoformat()}**")
-        header_cols = st.columns([1.1, 1, 1, 1, 1, 1, 1])
-        header_cols[0].write("")
-        for index, day_name in enumerate(day_names):
-            day_date = week_start + timedelta(days=index)
-            header_cols[index + 1].markdown(f"**{day_name}**  \n{day_date.strftime('%b')} {day_date.day}")
+    if layout == "Calendar":
+        for week_start in week_starts_between(window_start, window_end):
+            week_end = week_start + timedelta(days=5)
+            st.markdown(f"**Week of {week_start.isoformat()} to {week_end.isoformat()}**")
+            header_cols = st.columns([1.1, 1, 1, 1, 1, 1, 1])
+            header_cols[0].write("")
+            for index, day_name in enumerate(day_names):
+                day_date = week_start + timedelta(days=index)
+                header_cols[index + 1].markdown(f"**{day_name}**  \n{day_date.strftime('%b')} {day_date.day}")
 
-        previous_hour = None
-        for hour in hours:
-            if previous_hour is not None:
-                missing_hours = hour - previous_hour - 1
-                if missing_hours > 0:
-                    gap = missing_hour_gap_pixels if missing_hours == 1 else missing_hour_gap_pixels * 2
-                    st.markdown(f"<div style='height: {gap}px;'></div>", unsafe_allow_html=True)
-            row_cols = st.columns([1.1, 1, 1, 1, 1, 1, 1])
-            row_cols[0].markdown(f"**{format_hour(hour)}**")
-            for day_index in range(6):
-                slot_date = week_start + timedelta(days=day_index)
-                render_slot_button(row_cols[day_index + 1], slot_date, hour, "grid")
-            previous_hour = hour
-else:
-    for week_start in week_starts_between(window_start, window_end):
-        week_end = week_start + timedelta(days=5)
-        st.markdown(f"**Week of {week_start.isoformat()} to {week_end.isoformat()}**")
-        for day_index, day_name in enumerate(day_names):
-            slot_date = week_start + timedelta(days=day_index)
-            if not (window_start <= slot_date <= window_end):
-                continue
-            st.markdown(f"**{day_name} {slot_date.strftime('%b')} {slot_date.day}**")
+            previous_hour = None
             for hour in hours:
-                render_slot_button(st, slot_date, hour, "day")
+                if previous_hour is not None:
+                    missing_hours = hour - previous_hour - 1
+                    if missing_hours > 0:
+                        gap = missing_hour_gap_pixels if missing_hours == 1 else missing_hour_gap_pixels * 2
+                        st.markdown(f"<div style='height: {gap}px;'></div>", unsafe_allow_html=True)
+                row_cols = st.columns([1.1, 1, 1, 1, 1, 1, 1])
+                row_cols[0].markdown(f"**{format_hour(hour)}**")
+                for day_index in range(6):
+                    slot_date = week_start + timedelta(days=day_index)
+                    render_slot_button(row_cols[day_index + 1], slot_date, hour, "grid")
+                previous_hour = hour
+    else:
+        for week_start in week_starts_between(window_start, window_end):
+            week_end = week_start + timedelta(days=5)
+            st.markdown(f"**Week of {week_start.isoformat()} to {week_end.isoformat()}**")
+            for day_index, day_name in enumerate(day_names):
+                slot_date = week_start + timedelta(days=day_index)
+                if not (window_start <= slot_date <= window_end):
+                    continue
+                st.markdown(f"**{day_name} {slot_date.strftime('%b')} {slot_date.day}**")
+                for hour in hours:
+                    render_slot_button(st, slot_date, hour, "day")
 
-selected_slots = sorted(st.session_state[selected_state_key])
-st.write(f"{len(selected_slots)} new slot(s) selected.")
+    selected_slots = sorted(st.session_state[selected_state_key])
+    st.write(f"{len(selected_slots)} new slot(s) selected.")
 
-if st.button("Add Selected Time Slots", type="primary", disabled=not selected_slots):
-    batch = []
-    for selected_key in selected_slots:
-        _, selected_date, selected_start = selected_key.split("|")
-        batch.append((selected_date, selected_start))
-    added_count = add_practice_slots_batch(window_id, batch)
-    st.session_state[selected_state_key].clear()
-    st.success(f"Added {added_count} slot(s).")
-    st.rerun()
+    if st.button("Add Selected Time Slots", type="primary", disabled=not selected_slots):
+        batch = []
+        for selected_key in selected_slots:
+            _, selected_date, selected_start = selected_key.split("|")
+            batch.append((selected_date, selected_start))
+        added_count = add_practice_slots_batch(window_id, batch)
+        st.session_state[selected_state_key].clear()
+        st.success(f"Added {added_count} slot(s).")
+        st.rerun()
+
+
+render_availability_grid()
 
 st.subheader("Slots")
 slots = list_practice_slots(window_id)

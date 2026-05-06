@@ -75,7 +75,7 @@ ADMIN_PASSWORD = "byupickleball"
 The player availability page remains accessible by token at:
 
 ```text
-https://byupbscheduling.streamlit.app/player-submit-availability?token=<public_token>
+https://byupbscheduling.streamlit.app/?token=<public_token>
 ```
 
 ## Local Database

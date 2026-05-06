@@ -104,65 +104,84 @@ def render_slot_button(container, slot_date: date, hour: int, key_prefix: str) -
     key = slot_key(slot_date, hour)
     in_window = window_start <= slot_date <= window_end
     is_available = bool(slot and slot["id"] in st.session_state[selected_state_key])
-    clicked = container.button(
-        format_slot_label(slot_date, hour),
-        key=f"{key_prefix}_{key}",
-        type="primary" if is_available else "secondary",
-        disabled=(not in_window) or (slot is None) or (not window["submission_open"]),
-        width='stretch',
+    disabled = (not in_window) or (slot is None) or (not window["submission_open"])
+    button_kwargs = {
+        "label": format_slot_label(slot_date, hour),
+        "key": f"{key_prefix}_{key}",
+        "type": "primary" if is_available else "secondary",
+        "disabled": disabled,
+        "width": "stretch",
+    }
+    if slot is not None and window["submission_open"]:
+        button_kwargs["on_click"] = toggle_slot_selection
+        button_kwargs["args"] = (slot["id"],)
+    container.button(
+        **button_kwargs,
     )
-    if clicked and slot:
-        if is_available:
-            st.session_state[selected_state_key].remove(slot["id"])
-        else:
-            st.session_state[selected_state_key].add(slot["id"])
-        st.rerun()
 
 
-layout = st.radio("Layout", ["Calendar", "Day-by-day"], index=1, horizontal=True)
+def toggle_slot_selection(slot_id: int) -> None:
+    if slot_id in st.session_state[selected_state_key]:
+        st.session_state[selected_state_key].remove(slot_id)
+    else:
+        st.session_state[selected_state_key].add(slot_id)
 
-if layout == "Calendar":
-    for week_start in week_starts_between(window_start, window_end):
-        week_end = week_start + timedelta(days=5)
-        st.markdown(f"**Week of {week_start.isoformat()} to {week_end.isoformat()}**")
-        header_cols = st.columns([1.1, 1, 1, 1, 1, 1, 1])
-        header_cols[0].write("")
-        for index, day_name in enumerate(day_names):
-            day_date = week_start + timedelta(days=index)
-            header_cols[index + 1].markdown(f"**{day_name}**  \n{day_date.strftime('%b')} {day_date.day}")
 
-        previous_hour = None
-        for hour in hours:
-            if previous_hour is not None:
-                missing_hours = hour - previous_hour - 1
-                if missing_hours > 0:
-                    gap = missing_hour_gap_pixels if missing_hours == 1 else missing_hour_gap_pixels * 2
-                    st.markdown(f"<div style='height: {gap}px;'></div>", unsafe_allow_html=True)
-            row_cols = st.columns([1.1, 1, 1, 1, 1, 1, 1])
-            row_cols[0].markdown(f"**{format_hour(hour)}**")
-            for day_index in range(6):
-                slot_date = week_start + timedelta(days=day_index)
-                render_slot_button(row_cols[day_index + 1], slot_date, hour, "player_grid")
-            previous_hour = hour
-else:
-    for week_start in week_starts_between(window_start, window_end):
-        week_end = week_start + timedelta(days=5)
-        st.markdown(f"**Week of {week_start.isoformat()} to {week_end.isoformat()}**")
-        for day_index, day_name in enumerate(day_names):
-            slot_date = week_start + timedelta(days=day_index)
-            if not (window_start <= slot_date <= window_end):
-                continue
-            st.markdown(f"**{day_name} {slot_date.strftime('%b')} {slot_date.day}**")
-            for hour in hours:
-                render_slot_button(st, slot_date, hour, "player_day")
-
-selected_slot_ids = sorted(st.session_state[selected_state_key])
-st.write(f"{len(selected_slot_ids)} slot(s) selected.")
-
-if st.button("Clear Selected Slots", disabled=(not selected_slot_ids) or (not window["submission_open"])):
+def clear_selected_slots() -> None:
     st.session_state[selected_state_key].clear()
-    st.rerun()
 
-if st.button("Submit Availability", type="primary", disabled=not window["submission_open"]):
-    upsert_availability(player["id"], window["id"], selected_slot_ids)
-    st.success("Availability saved.")
+
+@st.fragment
+def render_player_availability_grid() -> None:
+    layout = st.radio("Layout", ["Calendar", "Day-by-day"], index=1, horizontal=True)
+
+    if layout == "Calendar":
+        for week_start in week_starts_between(window_start, window_end):
+            week_end = week_start + timedelta(days=5)
+            st.markdown(f"**Week of {week_start.isoformat()} to {week_end.isoformat()}**")
+            header_cols = st.columns([1.1, 1, 1, 1, 1, 1, 1])
+            header_cols[0].write("")
+            for index, day_name in enumerate(day_names):
+                day_date = week_start + timedelta(days=index)
+                header_cols[index + 1].markdown(f"**{day_name}**  \n{day_date.strftime('%b')} {day_date.day}")
+
+            previous_hour = None
+            for hour in hours:
+                if previous_hour is not None:
+                    missing_hours = hour - previous_hour - 1
+                    if missing_hours > 0:
+                        gap = missing_hour_gap_pixels if missing_hours == 1 else missing_hour_gap_pixels * 2
+                        st.markdown(f"<div style='height: {gap}px;'></div>", unsafe_allow_html=True)
+                row_cols = st.columns([1.1, 1, 1, 1, 1, 1, 1])
+                row_cols[0].markdown(f"**{format_hour(hour)}**")
+                for day_index in range(6):
+                    slot_date = week_start + timedelta(days=day_index)
+                    render_slot_button(row_cols[day_index + 1], slot_date, hour, "player_grid")
+                previous_hour = hour
+    else:
+        for week_start in week_starts_between(window_start, window_end):
+            week_end = week_start + timedelta(days=5)
+            st.markdown(f"**Week of {week_start.isoformat()} to {week_end.isoformat()}**")
+            for day_index, day_name in enumerate(day_names):
+                slot_date = week_start + timedelta(days=day_index)
+                if not (window_start <= slot_date <= window_end):
+                    continue
+                st.markdown(f"**{day_name} {slot_date.strftime('%b')} {slot_date.day}**")
+                for hour in hours:
+                    render_slot_button(st, slot_date, hour, "player_day")
+
+    selected_slot_ids = sorted(st.session_state[selected_state_key])
+    st.write(f"{len(selected_slot_ids)} slot(s) selected.")
+
+    st.button(
+        "Clear Selected Slots",
+        disabled=(not selected_slot_ids) or (not window["submission_open"]),
+        on_click=clear_selected_slots,
+    )
+
+    if st.button("Submit Availability", type="primary", disabled=not window["submission_open"]):
+        upsert_availability(player["id"], window["id"], selected_slot_ids)
+        st.success("Availability saved.")
+
+
+render_player_availability_grid()
