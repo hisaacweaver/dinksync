@@ -45,7 +45,7 @@ window_id = window_options[selected_label]
 window = next(w for w in windows if w["id"] == window_id)
 st.session_state["selected_window_id"] = window_id
 
-base_url = "http://localhost:8501/Player_Submit_Availability"
+base_url = "https://byupbscheduling.streamlit.app/Player_Submit_Availability"
 player_link = f"{base_url}?token={window['public_token']}"
 st.write("Share this token or link with players:")
 st.code(window["public_token"])
