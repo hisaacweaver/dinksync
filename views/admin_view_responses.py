@@ -7,7 +7,7 @@ from db import (
     get_slot_availability_counts,
     init_db,
     list_active_players,
-    list_available_players_for_slot,
+    list_available_players_for_window,
     list_schedule_windows,
     list_submitted_player_ids,
     set_submission_open,
@@ -82,6 +82,10 @@ if not slot_counts:
     st.info("No slots have been added yet.")
     st.stop()
 
+available_players_by_slot = {slot["id"]: [] for slot in slot_counts}
+for player in list_available_players_for_window(window_id):
+    available_players_by_slot.setdefault(player["practice_slot_id"], []).append(player)
+
 
 def week_starts_between(start: date, end: date) -> list[date]:
     first_monday = start - timedelta(days=start.weekday())
@@ -114,10 +118,13 @@ slots_by_time = {
     for slot in slot_counts
 }
 selected_slot_state_key = f"responses_selected_slot_{window_id}"
-show_players = st.radio("Players", ["Hide players", "Show players"], horizontal=True) == "Show players"
 
 
-def render_slot_button(container, slot_date: date, hour: int, key_prefix: str) -> None:
+def select_slot(slot_id: int) -> None:
+    st.session_state[selected_slot_state_key] = slot_id
+
+
+def render_slot_button(container, slot_date: date, hour: int, key_prefix: str, show_players: bool) -> None:
     start_time = f"{hour:02d}:00"
     slot = slots_by_time.get((slot_date.isoformat(), start_time))
     in_window = window_start <= slot_date <= window_end
@@ -128,65 +135,76 @@ def render_slot_button(container, slot_date: date, hour: int, key_prefix: str) -
         label = f"{day_names[slot_date.weekday()]} {slot_date.strftime('%b')} {slot_date.day} {format_hour(hour)} (0)"
         selected = False
 
-    clicked = container.button(
-        label,
-        key=f"{key_prefix}_{window_id}_{slot_date.isoformat()}_{hour}",
-        type="primary" if selected else "secondary",
-        disabled=(not in_window) or (slot is None),
-        width='stretch',
+    button_kwargs = {
+        "label": label,
+        "key": f"{key_prefix}_{window_id}_{slot_date.isoformat()}_{hour}",
+        "type": "primary" if selected else "secondary",
+        "disabled": (not in_window) or (slot is None),
+        "width": "stretch",
+    }
+    if slot:
+        button_kwargs["on_click"] = select_slot
+        button_kwargs["args"] = (slot["id"],)
+
+    container.button(
+        **button_kwargs,
     )
-    if clicked and slot:
-        st.session_state[selected_slot_state_key] = slot["id"]
-        st.rerun()
     if show_players and slot:
-        available_players = list_available_players_for_slot(slot["id"])
-        names = ", ".join(player["name"] for player in available_players)
-        container.caption(names if names else "No available players")
+        names = ", ".join(player["name"] for player in available_players_by_slot.get(slot["id"], []))
+        if names:
+            container.caption(names)
 
 
-layout = st.radio("Layout", ["Calendar", "Day-by-day"], horizontal=True)
+@st.fragment
+def render_response_grid() -> None:
+    show_players = st.radio("Players", ["Hide players", "Show players"], horizontal=True) == "Show players"
+    layout = st.radio("Layout", ["Calendar", "Day-by-day"], horizontal=True)
 
-if layout == "Calendar":
-    for week_start in week_starts_between(window_start, window_end):
-        week_end = week_start + timedelta(days=5)
-        st.markdown(f"**Week of {week_start.isoformat()} to {week_end.isoformat()}**")
-        header_cols = st.columns([1.1, 1, 1, 1, 1, 1, 1])
-        header_cols[0].write("")
-        for index, day_name in enumerate(day_names):
-            day_date = week_start + timedelta(days=index)
-            header_cols[index + 1].markdown(f"**{day_name}**  \n{day_date.strftime('%b')} {day_date.day}")
+    if layout == "Calendar":
+        for week_start in week_starts_between(window_start, window_end):
+            week_end = week_start + timedelta(days=5)
+            st.markdown(f"**Week of {week_start.isoformat()} to {week_end.isoformat()}**")
+            header_cols = st.columns([1.1, 1, 1, 1, 1, 1, 1])
+            header_cols[0].write("")
+            for index, day_name in enumerate(day_names):
+                day_date = week_start + timedelta(days=index)
+                header_cols[index + 1].markdown(f"**{day_name}**  \n{day_date.strftime('%b')} {day_date.day}")
 
-        previous_hour = None
-        for hour in hours:
-            if previous_hour is not None:
-                missing_hours = hour - previous_hour - 1
-                if missing_hours > 0:
-                    gap = missing_hour_gap_pixels if missing_hours == 1 else missing_hour_gap_pixels * 2
-                    st.markdown(f"<div style='height: {gap}px;'></div>", unsafe_allow_html=True)
-            row_cols = st.columns([1.1, 1, 1, 1, 1, 1, 1])
-            row_cols[0].markdown(f"**{format_hour(hour)}**")
-            for day_index in range(6):
-                slot_date = week_start + timedelta(days=day_index)
-                render_slot_button(row_cols[day_index + 1], slot_date, hour, "responses_grid")
-            previous_hour = hour
-else:
-    for week_start in week_starts_between(window_start, window_end):
-        week_end = week_start + timedelta(days=5)
-        st.markdown(f"**Week of {week_start.isoformat()} to {week_end.isoformat()}**")
-        for day_index, day_name in enumerate(day_names):
-            slot_date = week_start + timedelta(days=day_index)
-            if not (window_start <= slot_date <= window_end):
-                continue
-            st.markdown(f"**{day_name} {slot_date.strftime('%b')} {slot_date.day}**")
+            previous_hour = None
             for hour in hours:
-                render_slot_button(st, slot_date, hour, "responses_day")
+                if previous_hour is not None:
+                    missing_hours = hour - previous_hour - 1
+                    if missing_hours > 0:
+                        gap = missing_hour_gap_pixels if missing_hours == 1 else missing_hour_gap_pixels * 2
+                        st.markdown(f"<div style='height: {gap}px;'></div>", unsafe_allow_html=True)
+                row_cols = st.columns([1.1, 1, 1, 1, 1, 1, 1])
+                row_cols[0].markdown(f"**{format_hour(hour)}**")
+                for day_index in range(6):
+                    slot_date = week_start + timedelta(days=day_index)
+                    render_slot_button(row_cols[day_index + 1], slot_date, hour, "responses_grid", show_players)
+                previous_hour = hour
+    else:
+        for week_start in week_starts_between(window_start, window_end):
+            week_end = week_start + timedelta(days=5)
+            st.markdown(f"**Week of {week_start.isoformat()} to {week_end.isoformat()}**")
+            for day_index, day_name in enumerate(day_names):
+                slot_date = week_start + timedelta(days=day_index)
+                if not (window_start <= slot_date <= window_end):
+                    continue
+                st.markdown(f"**{day_name} {slot_date.strftime('%b')} {slot_date.day}**")
+                for hour in hours:
+                    render_slot_button(st, slot_date, hour, "responses_day", show_players)
 
-selected_slot_id = st.session_state.get(selected_slot_state_key)
-if selected_slot_id:
-    selected_slot = next((slot for slot in slot_counts if slot["id"] == selected_slot_id), None)
-    if selected_slot:
-        st.subheader(f"Available players for {selected_slot['date']} {selected_slot['start_time']}")
-        available_players = list_available_players_for_slot(selected_slot_id)
-        st.write(", ".join(player["name"] for player in available_players) if available_players else "No available players.")
-else:
-    st.info("Select a slot to view available players.")
+    selected_slot_id = st.session_state.get(selected_slot_state_key)
+    if selected_slot_id:
+        selected_slot = next((slot for slot in slot_counts if slot["id"] == selected_slot_id), None)
+        if selected_slot:
+            st.subheader(f"Available players for {selected_slot['date']} {selected_slot['start_time']}")
+            names = ", ".join(player["name"] for player in available_players_by_slot.get(selected_slot_id, []))
+            if names:
+                st.write(names)
+    else:
+        st.info("Select a slot to view available players.")
+
+
+render_response_grid()

@@ -3,7 +3,7 @@ from html import escape
 
 import streamlit as st
 
-from db import get_printable_schedule, init_db, list_assignments_for_slot, list_schedule_windows
+from db import get_printable_schedule, init_db, list_assignments_for_window, list_schedule_windows
 
 
 init_db()
@@ -34,6 +34,10 @@ rows_by_time = {
     (row["date"], row["start_time"]): row
     for row in rows
 }
+assignments_by_slot = {row["practice_slot_id"]: [] for row in rows}
+for assignment in list_assignments_for_window(window_id):
+    if assignment["practice_slot_id"] in assignments_by_slot:
+        assignments_by_slot[assignment["practice_slot_id"]].append(assignment)
 
 
 def week_starts_between(start: date, end: date) -> list[date]:
@@ -57,7 +61,7 @@ def render_schedule_cell(container, row) -> None:
         container.write("")
         return
 
-    assignments = list_assignments_for_slot(row["practice_slot_id"])
+    assignments = assignments_by_slot.get(row["practice_slot_id"], [])
     player_lines = []
     for assignment in assignments:
         player_name = escape(assignment["player_name"])
@@ -118,27 +122,32 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-for week_start in week_starts_between(window_start, window_end):
-    week_end = week_start + timedelta(days=5)
-    st.markdown(f"**Week of {week_start.isoformat()} to {week_end.isoformat()}**")
-    header_cols = st.columns([1.1, 1, 1, 1, 1, 1, 1])
-    header_cols[0].write("")
-    for index, day_name in enumerate(day_names):
-        day_date = week_start + timedelta(days=index)
-        header_cols[index + 1].markdown(f"**{day_name}**  \n{day_date.strftime('%b')} {day_date.day}")
+@st.fragment
+def render_schedule_calendar() -> None:
+    for week_start in week_starts_between(window_start, window_end):
+        week_end = week_start + timedelta(days=5)
+        st.markdown(f"**Week of {week_start.isoformat()} to {week_end.isoformat()}**")
+        header_cols = st.columns([1.1, 1, 1, 1, 1, 1, 1])
+        header_cols[0].write("")
+        for index, day_name in enumerate(day_names):
+            day_date = week_start + timedelta(days=index)
+            header_cols[index + 1].markdown(f"**{day_name}**  \n{day_date.strftime('%b')} {day_date.day}")
 
-    previous_hour = None
-    for hour in hours:
-        if previous_hour is not None:
-            missing_hours = hour - previous_hour - 1
-            if missing_hours > 0:
-                gap = missing_hour_gap_pixels if missing_hours == 1 else missing_hour_gap_pixels * 2
-                st.markdown(f"<div style='height: {gap}px;'></div>", unsafe_allow_html=True)
-        row_cols = st.columns([1.1, 1, 1, 1, 1, 1, 1])
-        row_cols[0].markdown(f"**{format_hour(hour)}**")
-        for day_index in range(6):
-            slot_date = week_start + timedelta(days=day_index)
-            start_time = f"{hour:02d}:00"
-            row = rows_by_time.get((slot_date.isoformat(), start_time))
-            render_schedule_cell(row_cols[day_index + 1], row)
-        previous_hour = hour
+        previous_hour = None
+        for hour in hours:
+            if previous_hour is not None:
+                missing_hours = hour - previous_hour - 1
+                if missing_hours > 0:
+                    gap = missing_hour_gap_pixels if missing_hours == 1 else missing_hour_gap_pixels * 2
+                    st.markdown(f"<div style='height: {gap}px;'></div>", unsafe_allow_html=True)
+            row_cols = st.columns([1.1, 1, 1, 1, 1, 1, 1])
+            row_cols[0].markdown(f"**{format_hour(hour)}**")
+            for day_index in range(6):
+                slot_date = week_start + timedelta(days=day_index)
+                start_time = f"{hour:02d}:00"
+                row = rows_by_time.get((slot_date.isoformat(), start_time))
+                render_schedule_cell(row_cols[day_index + 1], row)
+            previous_hour = hour
+
+
+render_schedule_calendar()

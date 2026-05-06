@@ -48,6 +48,15 @@ CREATE TABLE IF NOT EXISTS assignments (
     UNIQUE(practice_slot_id, player_id)
 );
 
+CREATE INDEX IF NOT EXISTS idx_practice_slots_window_time
+    ON practice_slots(schedule_window_id, date, start_time);
+CREATE INDEX IF NOT EXISTS idx_availability_slot_available
+    ON availability(practice_slot_id, available);
+CREATE INDEX IF NOT EXISTS idx_availability_player_slot
+    ON availability(player_id, practice_slot_id);
+CREATE INDEX IF NOT EXISTS idx_assignments_slot
+    ON assignments(practice_slot_id);
+
 -- INSERT INTO players (name, active, team, gender)
 -- VALUES
 --     ('Isaac', 1, 'Challenger', 'Unspecified'),

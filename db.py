@@ -165,6 +165,15 @@ def init_db() -> None:
                 FOREIGN KEY(practice_slot_id) REFERENCES practice_slots(id),
                 FOREIGN KEY(player_id) REFERENCES players(id)
             );
+
+            CREATE INDEX IF NOT EXISTS idx_practice_slots_window_time
+                ON practice_slots(schedule_window_id, date, start_time);
+            CREATE INDEX IF NOT EXISTS idx_availability_slot_available
+                ON availability(practice_slot_id, available);
+            CREATE INDEX IF NOT EXISTS idx_availability_player_slot
+                ON availability(player_id, practice_slot_id);
+            CREATE INDEX IF NOT EXISTS idx_assignments_slot
+                ON assignments(practice_slot_id);
             """
         )
 
@@ -240,6 +249,15 @@ def init_postgres_db() -> None:
                 is_practice_lead INTEGER NOT NULL DEFAULT 0,
                 UNIQUE(practice_slot_id, player_id)
             );
+
+            CREATE INDEX IF NOT EXISTS idx_practice_slots_window_time
+                ON practice_slots(schedule_window_id, date, start_time);
+            CREATE INDEX IF NOT EXISTS idx_availability_slot_available
+                ON availability(practice_slot_id, available);
+            CREATE INDEX IF NOT EXISTS idx_availability_player_slot
+                ON availability(player_id, practice_slot_id);
+            CREATE INDEX IF NOT EXISTS idx_assignments_slot
+                ON assignments(practice_slot_id);
             """
         )
 
@@ -648,6 +666,42 @@ def list_available_players_for_slot(
         ).fetchall()
 
 
+def list_available_players_for_window(
+    schedule_window_id: int,
+    teams: Iterable[str] | None = None,
+) -> list[sqlite3.Row]:
+    selected_teams = [normalize_team(team) for team in teams] if teams is not None else None
+    if selected_teams == []:
+        return []
+    with get_connection() as conn:
+        params: list[object] = [schedule_window_id]
+        team_clause = ""
+        if selected_teams is not None:
+            placeholders = ", ".join("?" for _ in selected_teams)
+            team_clause = f" AND p.team IN ({placeholders})"
+            params.extend(selected_teams)
+        return conn.execute(
+            f"""
+            SELECT
+                a.practice_slot_id,
+                p.id,
+                p.name,
+                p.active,
+                p.team,
+                p.gender
+            FROM availability a
+            JOIN practice_slots ps ON ps.id = a.practice_slot_id
+            JOIN players p ON p.id = a.player_id
+            WHERE ps.schedule_window_id = ?
+              AND a.available = 1
+              AND p.active = 1
+              {team_clause}
+            ORDER BY a.practice_slot_id, p.name
+            """,
+            params,
+        ).fetchall()
+
+
 def list_assignments_for_slot(practice_slot_id: int) -> list[sqlite3.Row]:
     with get_connection() as conn:
         return conn.execute(
@@ -659,6 +713,25 @@ def list_assignments_for_slot(practice_slot_id: int) -> list[sqlite3.Row]:
             ORDER BY p.name
             """,
             (practice_slot_id,),
+        ).fetchall()
+
+
+def list_assignments_for_window(schedule_window_id: int) -> list[sqlite3.Row]:
+    with get_connection() as conn:
+        return conn.execute(
+            """
+            SELECT
+                a.*,
+                p.name AS player_name,
+                p.team AS player_team,
+                p.gender AS player_gender
+            FROM assignments a
+            JOIN practice_slots ps ON ps.id = a.practice_slot_id
+            JOIN players p ON p.id = a.player_id
+            WHERE ps.schedule_window_id = ?
+            ORDER BY a.practice_slot_id, p.name
+            """,
+            (schedule_window_id,),
         ).fetchall()
 
 

@@ -9,8 +9,8 @@ from db import (
     delete_slot_schedule,
     get_slot_availability_counts,
     init_db,
-    list_assignments_for_slot,
-    list_available_players_for_slot,
+    list_assignments_for_window,
+    list_available_players_for_window,
     list_locations,
     list_schedule_windows,
     save_slot_schedule,
@@ -53,10 +53,9 @@ slots_by_time = {
 
 slots_by_id = {slot["id"]: slot for slot in slots}
 
-assignments_by_slot = {
-    slot["id"]: list_assignments_for_slot(slot["id"])
-    for slot in slots
-}
+assignments_by_slot = {slot["id"]: [] for slot in slots}
+for assignment in list_assignments_for_window(window_id):
+    assignments_by_slot.setdefault(assignment["practice_slot_id"], []).append(assignment)
 
 assignment_ids_by_slot = {
     slot_id: [assignment["player_id"] for assignment in assignments]
@@ -83,9 +82,13 @@ selected_teams = st.multiselect(
 )
 
 available_players_by_slot = {}
+filtered_available_players_by_slot = {slot["id"]: [] for slot in slots}
+for player in list_available_players_for_window(window_id, selected_teams):
+    filtered_available_players_by_slot.setdefault(player["practice_slot_id"], []).append(player)
+
 for slot in slots:
     slot_id = slot["id"]
-    filtered_players = list_available_players_for_slot(slot_id, selected_teams)
+    filtered_players = filtered_available_players_by_slot.get(slot_id, [])
     players_by_id = {player["id"]: player for player in filtered_players}
     for assignment in assignments_by_slot[slot_id]:
         if assignment["player_id"] not in players_by_id:
@@ -229,7 +232,7 @@ def schedule_slot_dialog(slot_id: int) -> None:
     st.subheader(format_slot_label(slot_date, start_hour, len(filtered_available_players)))
 
     available_options = {player["name"]: player["id"] for player in filtered_available_players}
-    existing_assignments = list_assignments_for_slot(slot_id)
+    existing_assignments = assignments_by_slot[slot_id]
     existing_ids = [assignment["player_id"] for assignment in existing_assignments]
 
     existing_names = [
@@ -278,9 +281,6 @@ def schedule_slot_dialog(slot_id: int) -> None:
             key=f"modal_custom_location_{slot_id}",
         )
 
-    if not available_options:
-        st.write("No available players for this slot.")
-
     assigned_names = st.multiselect(
         "Players",
         list(available_options.keys()),
@@ -302,10 +302,8 @@ def schedule_slot_dialog(slot_id: int) -> None:
     )
 
     lead_index = lead_options.index(existing_lead_name) if existing_lead_name in lead_options else 0
-    lead_state_key = f"modal_lead_{slot_id}"
-
-    if st.session_state.get(lead_state_key) not in (None, *lead_options):
-        st.session_state[lead_state_key] = "No lead"
+    assigned_ids_slug = "_".join(str(player_id) for player_id in assigned_ids) or "none"
+    lead_state_key = f"modal_lead_{slot_id}_{assigned_ids_slug}"
 
     lead_name = st.selectbox(
         "Lead",
@@ -421,41 +419,47 @@ def render_slot_button(container, slot_date: date, hour: int) -> None:
 
     if players_display == "Show players":
         names = ", ".join(available_player_names)
-        container.caption(names if names else "No available players")
+        if names:
+            container.caption(names)
 
 
-st.caption("Green slots have 4 or more available players. Blue slots have already been scheduled.")
+@st.fragment
+def render_schedule_calendar() -> None:
+    st.caption("Green slots have 4 or more available players. Blue slots have already been scheduled.")
 
-for week_start in week_starts_between(window_start, window_end):
-    week_end = week_start + timedelta(days=5)
+    for week_start in week_starts_between(window_start, window_end):
+        week_end = week_start + timedelta(days=5)
 
-    st.markdown(f"**Week of {week_start.isoformat()} to {week_end.isoformat()}**")
+        st.markdown(f"**Week of {week_start.isoformat()} to {week_end.isoformat()}**")
 
-    header_cols = st.columns([1.1, 1, 1, 1, 1, 1, 1])
-    header_cols[0].write("")
+        header_cols = st.columns([1.1, 1, 1, 1, 1, 1, 1])
+        header_cols[0].write("")
 
-    for index, day_name in enumerate(day_names):
-        day_date = week_start + timedelta(days=index)
-        header_cols[index + 1].markdown(f"**{day_name}**  \n{day_date.strftime('%b')} {day_date.day}")
+        for index, day_name in enumerate(day_names):
+            day_date = week_start + timedelta(days=index)
+            header_cols[index + 1].markdown(f"**{day_name}**  \n{day_date.strftime('%b')} {day_date.day}")
 
-    previous_hour = None
+        previous_hour = None
 
-    for hour in hours:
-        if previous_hour is not None:
-            missing_hours = hour - previous_hour - 1
+        for hour in hours:
+            if previous_hour is not None:
+                missing_hours = hour - previous_hour - 1
 
-            if missing_hours > 0:
-                gap = missing_hour_gap_pixels if missing_hours == 1 else missing_hour_gap_pixels * 2
-                st.markdown(f"<div style='height: {gap}px;'></div>", unsafe_allow_html=True)
+                if missing_hours > 0:
+                    gap = missing_hour_gap_pixels if missing_hours == 1 else missing_hour_gap_pixels * 2
+                    st.markdown(f"<div style='height: {gap}px;'></div>", unsafe_allow_html=True)
 
-        row_cols = st.columns([1.1, 1, 1, 1, 1, 1, 1])
-        row_cols[0].markdown(f"**{format_hour(hour)}**")
+            row_cols = st.columns([1.1, 1, 1, 1, 1, 1, 1])
+            row_cols[0].markdown(f"**{format_hour(hour)}**")
 
-        for day_index in range(6):
-            slot_date = week_start + timedelta(days=day_index)
-            render_slot_button(row_cols[day_index + 1], slot_date, hour)
+            for day_index in range(6):
+                slot_date = week_start + timedelta(days=day_index)
+                render_slot_button(row_cols[day_index + 1], slot_date, hour)
 
-        previous_hour = hour
+            previous_hour = hour
+
+
+render_schedule_calendar()
 
 
 st.subheader("Scheduled Practices")
@@ -463,7 +467,7 @@ st.subheader("Scheduled Practices")
 scheduled_rows = []
 
 for slot in slots:
-    assignments = list_assignments_for_slot(slot["id"])
+    assignments = assignments_by_slot[slot["id"]]
 
     if not assignments and not slot["location"].strip():
         continue
