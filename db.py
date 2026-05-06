@@ -59,7 +59,8 @@ class PostgresConnection:
         url = postgres_url()
         if not url:
             raise RuntimeError("Set SUPABASE_DB_URL in .streamlit/secrets.toml for Postgres.")
-        self.conn = psycopg.connect(url, row_factory=dict_row)
+        # Supabase pooler connections can reject psycopg prepared statements.
+        self.conn = psycopg.connect(url, row_factory=dict_row, prepare_threshold=None)
 
     def __enter__(self):
         return self

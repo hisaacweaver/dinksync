@@ -3,7 +3,7 @@ import streamlit as st
 from db import init_db
 
 
-st.set_page_config(page_title="DinkSync", layout="wide")
+st.set_page_config(page_title="DinkSync", layout="wide", initial_sidebar_state="collapsed")
 init_db()
 
 
@@ -44,7 +44,7 @@ PLAYER_PAGE = st.Page(
     "views/player_submit_availability.py",
     title="Submit Availability",
     icon="🏓",
-    url_path="Player_Submit_Availability",
+    url_path="player-submit-availability",
 )
 
 

@@ -45,7 +45,7 @@ window_id = window_options[selected_label]
 window = next(w for w in windows if w["id"] == window_id)
 st.session_state["selected_window_id"] = window_id
 
-base_url = "https://byupbscheduling.streamlit.app/Player_Submit_Availability"
+base_url = "https://byupbscheduling.streamlit.app/player-submit-availability"
 player_link = f"{base_url}?token={window['public_token']}"
 st.write("Share this token or link with players:")
 st.code(window["public_token"])
@@ -108,36 +108,47 @@ def selectable_slot_keys() -> set[str]:
     return keys
 
 
+def toggle_slot_selection(key: str) -> None:
+    if key in st.session_state[selected_state_key]:
+        st.session_state[selected_state_key].remove(key)
+    else:
+        st.session_state[selected_state_key].add(key)
+
+
+def select_all_available_slots() -> None:
+    st.session_state[selected_state_key].update(selectable_slot_keys())
+
+
+def clear_selected_slots() -> None:
+    st.session_state[selected_state_key].clear()
+
+
 def render_slot_button(container, slot_date: date, hour: int, key_prefix: str) -> None:
     key = slot_key(slot_date, hour)
     start_time = f"{hour:02d}:00"
     in_window = window_start <= slot_date <= window_end
     already_added = (slot_date.isoformat(), start_time) in existing_slots
     is_selected = key in st.session_state[selected_state_key]
-    clicked = container.button(
+    container.button(
         format_slot_label(slot_date, hour),
         key=f"{key_prefix}_{key}",
         type="primary" if is_selected or already_added else "secondary",
         disabled=(not in_window) or already_added,
         width='stretch',
+        on_click=toggle_slot_selection,
+        args=(key,),
     )
-    if clicked:
-        if is_selected:
-            st.session_state[selected_state_key].remove(key)
-        else:
-            st.session_state[selected_state_key].add(key)
-        st.rerun()
 
 
 layout = st.radio("Layout", ["Calendar", "Day-by-day"], horizontal=True)
 
 action_col1, action_col2 = st.columns(2)
-if action_col1.button("Select All Available Slots"):
-    st.session_state[selected_state_key].update(selectable_slot_keys())
-    st.rerun()
-if action_col2.button("Clear Selected Slots", disabled=not st.session_state[selected_state_key]):
-    st.session_state[selected_state_key].clear()
-    st.rerun()
+action_col1.button("Select All Available Slots", on_click=select_all_available_slots)
+action_col2.button(
+    "Clear Selected Slots",
+    disabled=not st.session_state[selected_state_key],
+    on_click=clear_selected_slots,
+)
 
 if layout == "Calendar":
     for week_start in week_starts_between(window_start, window_end):
