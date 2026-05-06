@@ -20,7 +20,7 @@ query_token = st.query_params.get("token", "")
 token = query_token or st.text_input("Token")
 
 if not token:
-    st.info("Enter the token from your admin, or open this page with `?token=<public_token>`.")
+    st.info("Enter the code from the captains, or open the link from the text.")
     st.stop()
 
 window = get_schedule_window_by_token(token)

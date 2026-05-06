@@ -3,7 +3,7 @@ import streamlit as st
 from db import init_db
 
 
-st.set_page_config(page_title="DinkSync", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="BYU PB Scheduling", layout="wide", initial_sidebar_state="collapsed")
 init_db()
 
 
