@@ -1,3 +1,5 @@
+import csv
+from io import StringIO
 from datetime import date, timedelta
 from html import escape
 
@@ -97,6 +99,7 @@ for slot in slots:
                 "name": assignment["player_name"],
                 "team": assignment["player_team"],
                 "gender": assignment["player_gender"],
+                "practice_group": assignment["player_practice_group"],
             }
     available_players_by_slot[slot_id] = list(players_by_id.values())
 
@@ -163,6 +166,66 @@ def sort_players_for_slot(players: list[dict], assigned_player_ids: set[int]) ->
             player["name"].lower(),
         ),
     )
+
+
+def player_export_entry(player) -> str:
+    gender_abbreviation = {
+        "Female": "F",
+        "Male": "M",
+    }.get(player["gender"], "")
+    team_abbreviation = {
+        "Premier": "P",
+        "Challenger": "C",
+        "Reserves": "R",
+    }.get(player["team"], "")
+    practice_group = player["practice_group"] or ""
+    return f"{player['name']}({gender_abbreviation},{team_abbreviation},{practice_group})"
+
+
+def build_availability_calendar_csv() -> str:
+    output = StringIO()
+    writer = csv.writer(output)
+
+    for week_index, week_start in enumerate(week_starts_between(window_start, window_end)):
+        if week_index:
+            writer.writerow([])
+
+        week_end = week_start + timedelta(days=5)
+        writer.writerow([f"Week of {week_start.isoformat()} to {week_end.isoformat()}"])
+        header = ["Time"]
+        for day_index in range(6):
+            day_date = week_start + timedelta(days=day_index)
+            header.append(f"{day_names[day_index]} {day_date:%b} {day_date.day}")
+        writer.writerow(header)
+
+        for hour in hours:
+            row = [format_hour(hour)]
+
+            for day_index in range(6):
+                slot_date = week_start + timedelta(days=day_index)
+                start_time = f"{hour:02d}:00"
+                slot = slots_by_time.get((slot_date.isoformat(), start_time))
+
+                if slot and window_start <= slot_date <= window_end:
+                    players = sort_players_for_slot(
+                        filtered_available_players_by_slot.get(slot["id"], []),
+                        set(),
+                    )
+                    row.append("\n".join(player_export_entry(player) for player in players))
+                else:
+                    row.append("")
+
+            writer.writerow(row)
+
+    return output.getvalue()
+
+
+st.download_button(
+    "Export Availability CSV",
+    data=build_availability_calendar_csv(),
+    file_name=f"availability_{window['title'].replace(' ', '_').lower()}_{window_id}.csv",
+    mime="text/csv",
+)
 
 
 st.markdown(

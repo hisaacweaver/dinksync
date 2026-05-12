@@ -3,7 +3,9 @@ CREATE TABLE IF NOT EXISTS players (
     name TEXT NOT NULL UNIQUE,
     active INTEGER NOT NULL DEFAULT 1,
     team TEXT NOT NULL DEFAULT 'Challenger',
-    gender TEXT NOT NULL DEFAULT 'Unspecified'
+    gender TEXT NOT NULL DEFAULT 'Unspecified',
+    phone_number TEXT,
+    practice_group TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS schedule_windows (

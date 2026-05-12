@@ -116,7 +116,9 @@ def init_db() -> None:
                 name TEXT NOT NULL UNIQUE,
                 active INTEGER NOT NULL DEFAULT 1,
                 team TEXT NOT NULL DEFAULT 'Challenger',
-                gender TEXT NOT NULL DEFAULT 'Unspecified'
+                gender TEXT NOT NULL DEFAULT 'Unspecified',
+                phone_number TEXT,
+                practice_group TEXT NOT NULL DEFAULT ''
             );
 
             CREATE TABLE IF NOT EXISTS schedule_windows (
@@ -205,7 +207,9 @@ def init_postgres_db() -> None:
                 name TEXT NOT NULL UNIQUE,
                 active INTEGER NOT NULL DEFAULT 1,
                 team TEXT NOT NULL DEFAULT 'Challenger',
-                gender TEXT NOT NULL DEFAULT 'Unspecified'
+                gender TEXT NOT NULL DEFAULT 'Unspecified',
+                phone_number TEXT,
+                practice_group TEXT NOT NULL DEFAULT ''
             );
 
             CREATE TABLE IF NOT EXISTS schedule_windows (
@@ -261,6 +265,8 @@ def init_postgres_db() -> None:
             """
         )
 
+        ensure_postgres_player_columns(conn)
+
         player_count = conn.execute("SELECT COUNT(*) AS count FROM players").fetchone()["count"]
         if player_count == 0:
             conn.executemany(
@@ -296,6 +302,10 @@ def ensure_player_columns(conn: sqlite3.Connection) -> None:
         conn.execute(
             "ALTER TABLE players ADD COLUMN gender TEXT NOT NULL DEFAULT 'Unspecified'"
         )
+    if "phone_number" not in columns:
+        conn.execute("ALTER TABLE players ADD COLUMN phone_number TEXT")
+    if "practice_group" not in columns:
+        conn.execute("ALTER TABLE players ADD COLUMN practice_group TEXT NOT NULL DEFAULT ''")
     conn.execute(
         "UPDATE players SET team = ? WHERE team IS NULL OR TRIM(team) = ''",
         (DEFAULT_TEAM,),
@@ -303,6 +313,23 @@ def ensure_player_columns(conn: sqlite3.Connection) -> None:
     conn.execute(
         "UPDATE players SET gender = ? WHERE gender IS NULL OR TRIM(gender) = ''",
         (DEFAULT_GENDER,),
+    )
+    conn.execute(
+        "UPDATE players SET practice_group = '' WHERE practice_group IS NULL",
+    )
+
+
+def ensure_postgres_player_columns(conn: PostgresConnection) -> None:
+    conn.executescript(
+        """
+        ALTER TABLE players ADD COLUMN IF NOT EXISTS team TEXT NOT NULL DEFAULT 'Challenger';
+        ALTER TABLE players ADD COLUMN IF NOT EXISTS gender TEXT NOT NULL DEFAULT 'Unspecified';
+        ALTER TABLE players ADD COLUMN IF NOT EXISTS phone_number TEXT;
+        ALTER TABLE players ADD COLUMN IF NOT EXISTS practice_group TEXT NOT NULL DEFAULT '';
+        UPDATE players SET team = 'Challenger' WHERE team IS NULL OR TRIM(team) = '';
+        UPDATE players SET gender = 'Unspecified' WHERE gender IS NULL OR TRIM(gender) = '';
+        UPDATE players SET practice_group = '' WHERE practice_group IS NULL;
+        """
     )
 
 
@@ -688,7 +715,8 @@ def list_available_players_for_window(
                 p.name,
                 p.active,
                 p.team,
-                p.gender
+                p.gender,
+                p.practice_group
             FROM availability a
             JOIN practice_slots ps ON ps.id = a.practice_slot_id
             JOIN players p ON p.id = a.player_id
@@ -706,7 +734,12 @@ def list_assignments_for_slot(practice_slot_id: int) -> list[sqlite3.Row]:
     with get_connection() as conn:
         return conn.execute(
             """
-            SELECT a.*, p.name AS player_name, p.team AS player_team, p.gender AS player_gender
+            SELECT
+                a.*,
+                p.name AS player_name,
+                p.team AS player_team,
+                p.gender AS player_gender,
+                p.practice_group AS player_practice_group
             FROM assignments a
             JOIN players p ON p.id = a.player_id
             WHERE a.practice_slot_id = ?
@@ -724,7 +757,8 @@ def list_assignments_for_window(schedule_window_id: int) -> list[sqlite3.Row]:
                 a.*,
                 p.name AS player_name,
                 p.team AS player_team,
-                p.gender AS player_gender
+                p.gender AS player_gender,
+                p.practice_group AS player_practice_group
             FROM assignments a
             JOIN practice_slots ps ON ps.id = a.practice_slot_id
             JOIN players p ON p.id = a.player_id
