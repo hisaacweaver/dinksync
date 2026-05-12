@@ -168,18 +168,27 @@ def sort_players_for_slot(players: list[dict], assigned_player_ids: set[int]) ->
     )
 
 
+def player_value(player, key: str, default: str = "") -> str:
+    if isinstance(player, dict):
+        return player.get(key) or default
+    try:
+        return player[key] or default
+    except (IndexError, KeyError):
+        return default
+
+
 def player_export_entry(player) -> str:
     gender_abbreviation = {
         "Female": "F",
         "Male": "M",
-    }.get(player["gender"], "")
+    }.get(player_value(player, "gender"), "")
     team_abbreviation = {
         "Premier": "P",
         "Challenger": "C",
         "Reserves": "R",
-    }.get(player["team"], "")
-    practice_group = player["practice_group"] or ""
-    return f"{player['name']}({gender_abbreviation},{team_abbreviation},{practice_group})"
+    }.get(player_value(player, "team"), "")
+    practice_group = player_value(player, "practice_group")
+    return f"{player_value(player, 'name')}({gender_abbreviation},{team_abbreviation},{practice_group})"
 
 
 def build_availability_calendar_csv() -> str:
