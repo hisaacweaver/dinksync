@@ -28,8 +28,8 @@ if not rows:
 window_start = date.fromisoformat(window["start_date"])
 window_end = date.fromisoformat(window["end_date"])
 day_names = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
-hours = (6, 8, 15, 16, 18, 19, 20, 21)
-missing_hour_gap_pixels = 12
+hours = (6, 8, 10, 12, 14, 16, 18, 20)
+missing_hour_gap_pixels = 8
 rows_by_time = {
     (row["date"], row["start_time"]): row
     for row in rows

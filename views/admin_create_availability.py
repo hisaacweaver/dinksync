@@ -86,8 +86,8 @@ if selected_state_key not in st.session_state:
 window_start = date.fromisoformat(window["start_date"])
 window_end = date.fromisoformat(window["end_date"])
 day_names = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
-hours = (6, 8, 15, 16, 18, 19, 20, 21)
-missing_hour_gap_pixels = 12
+hours = (6, 8, 10, 12, 14, 16, 18, 20)
+missing_hour_gap_pixels = 8
 existing_slots = {
     (slot["date"], slot["start_time"])
     for slot in list_practice_slots(window_id)
